@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false); // This will be replaced with actual auth state
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    // This will be replaced with actual logout logic
-    setIsLoggedIn(false);
+    logout();
     navigate('/');
   };
 
@@ -34,17 +34,20 @@ const Navbar = () => {
             <Link to="/list-spot" className="text-gray-700 hover:text-blue-600 transition-colors">
               List Your Spot
             </Link>
-            {isLoggedIn ? (
+            {user ? (
               <>
-                <Link to="/profile" className="text-gray-700 hover:text-blue-600 transition-colors">
-                  Profile
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Logout
-                </button>
+                <div className="flex items-center space-x-4">
+                  <span className="text-gray-700">Welcome, {user.name}</span>
+                  <Link to="/profile" className="text-gray-700 hover:text-blue-600 transition-colors">
+                    Profile
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    Logout
+                  </button>
+                </div>
               </>
             ) : (
               <Link
@@ -91,8 +94,9 @@ const Navbar = () => {
               >
                 List Your Spot
               </Link>
-              {isLoggedIn ? (
+              {user ? (
                 <>
+                  <div className="text-gray-700">Welcome, {user.name}</div>
                   <Link
                     to="/profile"
                     className="text-gray-700 hover:text-blue-600 transition-colors"
