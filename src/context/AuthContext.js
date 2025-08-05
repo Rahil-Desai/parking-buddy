@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { database } from '../utils/database';
+import { authenticateUser, createUser, updateUser, findUserById } from '../utils/database';
 
 const AuthContext = createContext();
 
@@ -22,7 +22,7 @@ export const AuthProvider = ({ children }) => {
       try {
         const userData = JSON.parse(savedUser);
         // Verify user still exists in database
-        const currentUser = database.findUserById(userData.id);
+        const currentUser = findUserById(userData.id);
         if (currentUser) {
           setUser(userData);
         } else {
@@ -43,7 +43,13 @@ export const AuthProvider = ({ children }) => {
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Use real database authentication
-      const userData = database.authenticateUser(email, password);
+      const result = authenticateUser(email, password);
+      
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+      
+      const userData = result.user;
       
       setUser(userData);
       localStorage.setItem('parkingBuddyUser', JSON.stringify(userData));
@@ -60,7 +66,13 @@ export const AuthProvider = ({ children }) => {
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Use real database to create user
-      const newUser = database.createUser(userData);
+      const result = createUser(userData);
+      
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+      
+      const newUser = result.user;
       
       setUser(newUser);
       localStorage.setItem('parkingBuddyUser', JSON.stringify(newUser));
@@ -82,7 +94,13 @@ export const AuthProvider = ({ children }) => {
         throw new Error('No user logged in');
       }
       
-      const updatedUser = database.updateUser(user.id, updates);
+      const result = updateUser(user.id, updates);
+      
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+      
+      const updatedUser = result.user;
       setUser(updatedUser);
       localStorage.setItem('parkingBuddyUser', JSON.stringify(updatedUser));
       return { success: true, user: updatedUser };

@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { emailService } from '../utils/emailService';
 
 const LoginRegisterPage = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showEmailVerification, setShowEmailVerification] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [generatedCode, setGeneratedCode] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -14,6 +19,7 @@ const LoginRegisterPage = () => {
   });
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState('');
   const navigate = useNavigate();
   const { login, register } = useAuth();
 
@@ -89,18 +95,18 @@ const LoginRegisterPage = () => {
       newErrors.email = 'Email is invalid';
     }
 
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else {
-      const requirements = getPasswordRequirements(formData.password);
-      const unmetRequirements = requirements.filter(req => !req.met);
-      
-      if (unmetRequirements.length > 0) {
-        newErrors.password = `Password must meet all requirements`;
+    if (!isLogin && !showEmailVerification) {
+      if (!formData.password) {
+        newErrors.password = 'Password is required';
+      } else {
+        const requirements = getPasswordRequirements(formData.password);
+        const unmetRequirements = requirements.filter(req => !req.met);
+        
+        if (unmetRequirements.length > 0) {
+          newErrors.password = `Password must meet all requirements`;
+        }
       }
-    }
 
-    if (!isLogin) {
       if (!formData.name) {
         newErrors.name = 'Name is required';
       }
@@ -114,6 +120,71 @@ const LoginRegisterPage = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    if (!formData.email) {
+      setErrors({ email: 'Email is required for password reset' });
+      return;
+    }
+
+    setIsLoading(true);
+    setErrors({});
+
+    try {
+      // Send real password reset email
+      const result = await emailService.sendPasswordResetEmail(formData.email);
+      
+      if (result.success) {
+        setMessage(result.message);
+        setShowForgotPassword(false);
+      } else {
+        setErrors({ general: result.message });
+      }
+    } catch (error) {
+      setErrors({ general: 'Failed to send reset email. Please try again.' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEmailVerification = async (e) => {
+    e.preventDefault();
+    if (!verificationCode) {
+      setErrors({ verificationCode: 'Verification code is required' });
+      return;
+    }
+
+    setIsLoading(true);
+    setErrors({});
+
+    try {
+      // Verify the code
+      if (verificationCode === generatedCode) {
+        setShowEmailVerification(false);
+        setMessage('Email verified successfully! You can now complete your registration.');
+        
+        // Complete registration
+        const result = await register({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password
+        });
+
+        if (result.success) {
+          navigate('/');
+        } else {
+          setErrors({ general: result.error });
+        }
+      } else {
+        setErrors({ verificationCode: 'Invalid verification code. Please try again.' });
+      }
+    } catch (error) {
+      setErrors({ general: 'Verification failed. Please try again.' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -125,26 +196,28 @@ const LoginRegisterPage = () => {
     setErrors({});
 
     try {
-      let result;
-      
       if (isLogin) {
         // Handle login
-        result = await login(formData.email, formData.password);
+        const result = await login(formData.email, formData.password);
+        
+        if (result.success) {
+          navigate('/');
+        } else {
+          setErrors({ general: result.error });
+        }
       } else {
-        // Handle registration
-        result = await register({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password
-        });
-      }
-
-      if (result.success) {
-        // Success - navigate to home page
-        navigate('/');
-      } else {
-        // Show error message
-        setErrors({ general: result.error });
+        // Handle registration - send verification email first
+        const code = emailService.generateVerificationCode();
+        setGeneratedCode(code);
+        
+        const emailResult = await emailService.sendVerificationEmail(formData.email, code);
+        
+        if (emailResult.success) {
+          setShowEmailVerification(true);
+          setMessage(`Verification code sent to ${formData.email}. Check your email and enter the code.`);
+        } else {
+          setErrors({ general: emailResult.message });
+        }
       }
     } catch (error) {
       console.error('Authentication error:', error);
@@ -157,6 +230,177 @@ const LoginRegisterPage = () => {
   const passwordStrength = getPasswordStrength(formData.password);
   const passwordRequirements = getPasswordRequirements(formData.password);
 
+  // Email verification screen
+  if (showEmailVerification) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8">
+          <div>
+            <div className="mx-auto h-12 w-12 bg-blue-600 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+              Verify Your Email
+            </h2>
+            <p className="mt-2 text-center text-sm text-gray-600">
+              We've sent a verification code to {formData.email}
+            </p>
+          </div>
+
+          {message && (
+            <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg">
+              {message}
+            </div>
+          )}
+
+          <form className="mt-8 space-y-6" onSubmit={handleEmailVerification}>
+            {errors.general && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                {errors.general}
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="verificationCode" className="block text-sm font-medium text-gray-700">
+                Verification Code
+              </label>
+              <input
+                id="verificationCode"
+                name="verificationCode"
+                type="text"
+                required
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value)}
+                className={`mt-1 appearance-none relative block w-full px-3 py-2 border ${
+                  errors.verificationCode ? 'border-red-300' : 'border-gray-300'
+                } placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm`}
+                placeholder="Enter 6-digit code"
+                maxLength="6"
+              />
+              {errors.verificationCode && (
+                <p className="mt-1 text-sm text-red-600">{errors.verificationCode}</p>
+              )}
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? (
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : null}
+                {isLoading ? 'Verifying...' : 'Verify Email'}
+              </button>
+            </div>
+
+            <div className="text-center space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowEmailVerification(false)}
+                className="font-medium text-blue-600 hover:text-blue-500"
+              >
+                Back to registration
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // Forgot password screen
+  if (showForgotPassword) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8">
+          <div>
+            <div className="mx-auto h-12 w-12 bg-blue-600 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+            </div>
+            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+              Reset Your Password
+            </h2>
+            <p className="mt-2 text-center text-sm text-gray-600">
+              Enter your email address and we'll send you a link to reset your password.
+            </p>
+          </div>
+
+          {message && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">
+              {message}
+            </div>
+          )}
+
+          <form className="mt-8 space-y-6" onSubmit={handleForgotPassword}>
+            {errors.general && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                {errors.general}
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                Email address
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={formData.email}
+                onChange={handleInputChange}
+                className={`mt-1 appearance-none relative block w-full px-3 py-2 border ${
+                  errors.email ? 'border-red-300' : 'border-gray-300'
+                } placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm`}
+                placeholder="Enter your email"
+              />
+              {errors.email && (
+                <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+              )}
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? (
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : null}
+                {isLoading ? 'Sending...' : 'Send Reset Link'}
+              </button>
+            </div>
+
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(false)}
+                className="font-medium text-blue-600 hover:text-blue-500"
+              >
+                Back to sign in
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // Main login/register form
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -362,6 +606,18 @@ const LoginRegisterPage = () => {
             )}
           </div>
 
+          {isLogin && (
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-sm font-medium text-blue-600 hover:text-blue-500"
+              >
+                Forgot your password?
+              </button>
+            </div>
+          )}
+
           <div>
             <button
               type="submit"
@@ -374,7 +630,7 @@ const LoginRegisterPage = () => {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               ) : null}
-              {isLoading ? 'Processing...' : (isLogin ? 'Sign in' : 'Sign up')}
+              {isLoading ? 'Processing...' : (isLogin ? 'Sign in' : 'Continue to Verification')}
             </button>
           </div>
 

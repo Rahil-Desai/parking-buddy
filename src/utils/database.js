@@ -1,157 +1,148 @@
-// Simple database utility using localStorage
-// In a real app, this would be replaced with a proper backend database
+// Mock database using localStorage
+// In a real app, this would be replaced with actual backend API calls
 
-const USERS_KEY = 'parkingBuddyUsers';
-
-// Simple password hashing simulation (in real app, use bcrypt)
-const hashPassword = (password) => {
-  // This is a simple hash for demo purposes
-  // In production, use proper hashing like bcrypt
-  return btoa(password + 'salt');
+// Initialize localStorage database
+const init = () => {
+  if (!localStorage.getItem('parkingBuddyUsers')) {
+    localStorage.setItem('parkingBuddyUsers', JSON.stringify([]));
+  }
 };
 
+// Get all users
+const getUsers = () => {
+  const users = localStorage.getItem('parkingBuddyUsers');
+  return users ? JSON.parse(users) : [];
+};
+
+// Save users to localStorage
+const saveUsers = (users) => {
+  localStorage.setItem('parkingBuddyUsers', JSON.stringify(users));
+};
+
+// Simple password hashing simulation
+const hashPassword = (password) => {
+  // In a real app, use bcrypt or similar
+  return btoa(password + 'salt'); // Base64 encoding for demo
+};
+
+// Verify password
 const verifyPassword = (password, hashedPassword) => {
   return hashPassword(password) === hashedPassword;
 };
 
-export const database = {
-  // Initialize database
-  init() {
-    if (!localStorage.getItem(USERS_KEY)) {
-      localStorage.setItem(USERS_KEY, JSON.stringify([]));
-    }
-  },
-
-  // Get all users
-  getUsers() {
-    try {
-      const users = localStorage.getItem(USERS_KEY);
-      return users ? JSON.parse(users) : [];
-    } catch (error) {
-      console.error('Error reading users:', error);
-      return [];
-    }
-  },
-
-  // Save users
-  saveUsers(users) {
-    try {
-      localStorage.setItem(USERS_KEY, JSON.stringify(users));
-      return true;
-    } catch (error) {
-      console.error('Error saving users:', error);
-      return false;
-    }
-  },
-
-  // Find user by email
-  findUserByEmail(email) {
-    const users = this.getUsers();
-    return users.find(user => user.email.toLowerCase() === email.toLowerCase());
-  },
-
-  // Find user by ID
-  findUserById(id) {
-    const users = this.getUsers();
-    return users.find(user => user.id === id);
-  },
-
-  // Create new user
-  createUser(userData) {
-    const users = this.getUsers();
-    
-    // Check if user already exists
-    if (this.findUserByEmail(userData.email)) {
-      throw new Error('User with this email already exists');
-    }
-
-    const newUser = {
-      id: Date.now().toString(),
-      name: userData.name,
-      email: userData.email.toLowerCase(),
-      password: hashPassword(userData.password),
-      role: 'guest', // Default role
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    users.push(newUser);
-    
-    if (this.saveUsers(users)) {
-      // Return user without password
-      const { password, ...userWithoutPassword } = newUser;
-      return userWithoutPassword;
-    } else {
-      throw new Error('Failed to save user');
-    }
-  },
-
-  // Authenticate user
-  authenticateUser(email, password) {
-    const user = this.findUserByEmail(email);
-    
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    if (!verifyPassword(password, user.password)) {
-      throw new Error('Invalid password');
-    }
-
-    // Return user without password
-    const { password: _, ...userWithoutPassword } = user;
-    return userWithoutPassword;
-  },
-
-  // Update user
-  updateUser(id, updates) {
-    const users = this.getUsers();
-    const userIndex = users.findIndex(user => user.id === id);
-    
-    if (userIndex === -1) {
-      throw new Error('User not found');
-    }
-
-    users[userIndex] = {
-      ...users[userIndex],
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
-
-    if (this.saveUsers(users)) {
-      const { password, ...userWithoutPassword } = users[userIndex];
-      return userWithoutPassword;
-    } else {
-      throw new Error('Failed to update user');
-    }
-  },
-
-  // Delete user
-  deleteUser(id) {
-    const users = this.getUsers();
-    const filteredUsers = users.filter(user => user.id !== id);
-    
-    if (users.length === filteredUsers.length) {
-      throw new Error('User not found');
-    }
-
-    return this.saveUsers(filteredUsers);
-  },
-
-  // Get user statistics
-  getUserStats() {
-    const users = this.getUsers();
-    return {
-      totalUsers: users.length,
-      guests: users.filter(user => user.role === 'guest').length,
-      hosts: users.filter(user => user.role === 'host').length,
-      recentUsers: users
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, 5)
-        .map(user => ({ id: user.id, name: user.name, email: user.email, createdAt: user.createdAt }))
-    };
-  }
+// Find user by email
+const findUserByEmail = (email) => {
+  const users = getUsers();
+  return users.find(user => user.email === email);
 };
 
-// Initialize database on import
-database.init(); 
+// Find user by ID
+const findUserById = (id) => {
+  const users = getUsers();
+  return users.find(user => user.id === id);
+};
+
+// Create new user
+const createUser = (userData) => {
+  const users = getUsers();
+  
+  // Check if user already exists
+  if (findUserByEmail(userData.email)) {
+    return { success: false, error: 'User with this email already exists' };
+  }
+
+  const newUser = {
+    id: Date.now().toString(),
+    name: userData.name,
+    email: userData.email,
+    password: hashPassword(userData.password),
+    role: userData.role || 'guest',
+    createdAt: new Date().toISOString(),
+    isVerified: false
+  };
+
+  users.push(newUser);
+  saveUsers(users);
+
+  return { success: true, user: { ...newUser, password: undefined } };
+};
+
+// Authenticate user
+const authenticateUser = (email, password) => {
+  const user = findUserByEmail(email);
+  
+  if (!user) {
+    return { success: false, error: 'User not found' };
+  }
+
+  if (!verifyPassword(password, user.password)) {
+    return { success: false, error: 'Invalid password' };
+  }
+
+  return { 
+    success: true, 
+    user: { ...user, password: undefined } 
+  };
+};
+
+// Update user
+const updateUser = (id, updates) => {
+  const users = getUsers();
+  const userIndex = users.findIndex(user => user.id === id);
+  
+  if (userIndex === -1) {
+    return { success: false, error: 'User not found' };
+  }
+
+  users[userIndex] = { ...users[userIndex], ...updates };
+  saveUsers(users);
+
+  return { 
+    success: true, 
+    user: { ...users[userIndex], password: undefined } 
+  };
+};
+
+// Delete user
+const deleteUser = (id) => {
+  const users = getUsers();
+  const filteredUsers = users.filter(user => user.id !== id);
+  
+  if (filteredUsers.length === users.length) {
+    return { success: false, error: 'User not found' };
+  }
+
+  saveUsers(filteredUsers);
+  return { success: true };
+};
+
+// Get user statistics
+const getUserStats = () => {
+  const users = getUsers();
+  const total = users.length;
+  const guests = users.filter(user => user.role === 'guest').length;
+  const hosts = users.filter(user => user.role === 'host').length;
+  const recent = users
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 5);
+
+  return { total, guests, hosts, recent };
+};
+
+// Initialize on import
+init();
+
+export {
+  init,
+  getUsers,
+  saveUsers,
+  hashPassword,
+  verifyPassword,
+  findUserByEmail,
+  findUserById,
+  createUser,
+  authenticateUser,
+  updateUser,
+  deleteUser,
+  getUserStats
+}; 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { database } from '../utils/database';
+import { getUsers, getUserStats, deleteUser } from '../utils/database';
 
 const AdminPage = () => {
   const [users, setUsers] = useState([]);
@@ -12,8 +12,8 @@ const AdminPage = () => {
 
   const loadData = () => {
     try {
-      const allUsers = database.getUsers();
-      const userStats = database.getUserStats();
+      const allUsers = getUsers();
+      const userStats = getUserStats();
       
       setUsers(allUsers.map(user => ({
         ...user,
@@ -30,7 +30,7 @@ const AdminPage = () => {
   const deleteUser = (userId) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
-        database.deleteUser(userId);
+        deleteUser(userId);
         loadData(); // Reload data
         alert('User deleted successfully');
       } catch (error) {
@@ -62,7 +62,7 @@ const AdminPage = () => {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <div className="bg-blue-100 p-6 rounded-lg">
                   <h3 className="text-lg font-semibold text-blue-900">Total Users</h3>
-                  <p className="text-3xl font-bold text-blue-600">{stats.totalUsers}</p>
+                  <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
                 </div>
                 <div className="bg-green-100 p-6 rounded-lg">
                   <h3 className="text-lg font-semibold text-green-900">Guests</h3>
@@ -74,7 +74,7 @@ const AdminPage = () => {
                 </div>
                 <div className="bg-orange-100 p-6 rounded-lg">
                   <h3 className="text-lg font-semibold text-orange-900">Recent Users</h3>
-                  <p className="text-3xl font-bold text-orange-600">{stats.recentUsers.length}</p>
+                  <p className="text-3xl font-bold text-orange-600">{stats.recent.length}</p>
                 </div>
               </div>
             )}
@@ -148,11 +148,11 @@ const AdminPage = () => {
             </div>
 
             {/* Recent Users */}
-            {stats && stats.recentUsers.length > 0 && (
+            {stats && stats.recent.length > 0 && (
               <div className="mt-8">
                 <h2 className="text-2xl font-semibold text-gray-900 mb-4">Recent Users</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {stats.recentUsers.map((user) => (
+                  {stats.recent.map((user) => (
                     <div key={user.id} className="bg-gray-50 p-4 rounded-lg">
                       <div className="flex items-center">
                         <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center mr-3">
